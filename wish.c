@@ -54,6 +54,7 @@ main(int argc, char *argv[])
 
       // exit if reached the end of file/i.e. stdin == (Ctrl + D)
       if(feof(stdin)){
+        printf("\n");
         exit(0);
       }
 
@@ -64,12 +65,14 @@ main(int argc, char *argv[])
       if((ptr = strstr(line, "exit")) != NULL){
         if(strlen(line) != 5) // its error to type exit w/arguments
           write(STDERR_FILENO, error_message, strlen(error_message));
-        else
+        else{
           exit(0);
+        }
       }
 
-      // also exit if reached the end of file/i.e. stdin == (Ctrl + D)
+      // to avoid prinnting 'wish> 'e before exiting when stdin == (Ctrl + D)
       else if(feof(stdin)){
+	printf("\n");
         exit(0);
       }
 
