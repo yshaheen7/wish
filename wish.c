@@ -24,6 +24,7 @@ main(int argc, char *argv[])
   char *token;
   char defPath[] = "/bin/";
   char *path;
+  //int argsCount;
   char error_message[30] = "An error has occurred\n";
    
   // exit if the user has run the shell wih too many arguments
@@ -50,113 +51,87 @@ main(int argc, char *argv[])
   else{
     while(1){
       printf("wish> "); // print the prompt for the user
+
+      // exit if reached the end of file/i.e. stdin == (Ctrl + D)
+      if(feof(stdin)){
+        exit(0);
+      }
+
+      // otherwise get the input and store it in 'line'
       getline(&line, &len, stdin);
-      
-      // first built-in command, exit
-      /*if((ptr = strstr(line, "exit")) != NULL){
-        if(strlen(line) != 5) // its error to type exit w/argyment
-          write(STDERR_FILENO, error_message, strlen(error_message));
-        else
-          exit(0);
-      }*/
 
-      int rc = fork();
-      if(rc < 0){
-        write(STDERR_FILENO, error_message, strlen(error_message));
-        exit(1);
-      }
-      else if(rc == 0){
-        // this is new child process
-	printf("in child process now\n");
- 
-        token = strtok(line, s);
-       // char **args = malloc(sizeof(char*) * 10);
-       // for(int i = 0; i < 10; i++){
-       //   args[i] = malloc(sizeof(char) * 15);
-       // }
-       	printf("token is:%s with length %ld", token, strlen(token));
-        path = malloc(strlen(defPath) + strlen(token));
-        char **args = malloc(sizeof(char *) * 2);
-	strcpy(path, token);
-	strcpy(path, defPath);
-	printf("path is:%s and length is: %ld\n", path,strlen(path));
-        strcat(path, token);
-	 printf("path is now:%s with length%ld\n", path, strlen(path));
-     
-	args[0] = malloc(strlen(path)); 
-	strcpy(args[0], path);
- printf("args[0] is %s with length%ld\n", args[0], strlen(args[0])); 
-        /*for(int j = 1; ; j++, token = strtok(NULL, s),
-                               args[j] = strdup(token)){
-          if(token == NULL){
-            args[j] = NULL;
-            printf("now breaking out of the loop\n");
-	    break;
-	  }
-	  printf("token:%s\n", token);
-
-        }*/
-	/*
-	int counter = 0;
-	while(token != NULL){
-          token = strtok(NULL, s);
-	  counter++;
-	  args[counter] = strdup(token);
-	  printf("%s\n", args[counter]);
-	}
-	token = strtok(NULL, s);
-	 printf("1\n");
-	args[1] = strdup(token);
-	printf("2\n");
-
-	token = strtok(NULL, s);
-	printf("3\n");
-
-//        args[2] = strdup(token);
-//	printf("4\n");
-*/
-	args[1] = NULL;
-	printf("2\n");
-
-char *argu[2];
-argu[0] = "/bin/ls";
-argu[1] = NULL;
-int n;
-	for(int i = 0; i < 2; i++){
-          printf("args[%d] is:%s\n", i, args[i]);
-        }
-	printf("argu[0] is:%s\n", argu[0]);
-	if(access(argu[0], X_OK) == -1)
-          printf("command doesn't exist in path\n");
-if((n = strcmp(argu[0], args[0])) != 0){
-	printf("string do not mathch, value is:%d\n",n);
-	printf("args length:%ld", strlen(args[0]));
-	printf("argu length:%ld", strlen(argu[0]));
-		}
-	
-	else{
-          printf("now calling ls function\n");
-          execv(argu[0], argu);
-	}
-      }
-      else{
-	printf("now waiting\n");
-        wait(NULL);
-	printf("now in parent process\n");
-      }
-
-      // if user typed exit, then exit the shell
+      // first built-in command, exit. check if user typed exit
       if((ptr = strstr(line, "exit")) != NULL){
-        if(strlen(line) != 5) // its error to type exit w/argyment
+        if(strlen(line) != 5) // its error to type exit w/arguments
           write(STDERR_FILENO, error_message, strlen(error_message));
         else
           exit(0);
       }
-      // if reached the end of file/ stdin == (Ctrl + D)
-      if(feof(stdin)) 
-        exit(0);   
+
+      // also exit if reached the end of file/i.e. stdin == (Ctrl + D)
+      else if(feof(stdin)){
+        exit(0);
+      }
+
+      // if not a built-in command, fork a child process to execute command
+      else{
+        int rc = fork();
+	// now in the child process, if negative then fork failed
+        if(rc < 0){
+          write(STDERR_FILENO, error_message, strlen(error_message));
+          exit(1);
+        }
+        else if(rc == 0){
+          // this is the new child process
+          // get the first token, i.e. the command to be executed 
+          token = strtok(line, s);
+
+          // allocate memory in path varialbe to hold the command full path
+          path = malloc(strlen(defPath) + strlen(token));
+
+          // path now has the full path for the command (along with default path)
+          strcpy(path, defPath);
+          strcat(path, token);
+
+          // allocate memory for args array(which is to be passed to execv)
+          // initially, it has only one slot to hold the command's path
+          char **args = (char**)malloc(sizeof(char*) * 1);
+          *args = malloc(sizeof(char) * strlen(path));
+          // now add the command's full path to the first element of args
+          strcpy(*args, path);
+
+          // read the rest of tokens, reallocate memory in the args array
+          // and allocate memory for each token, then add it to the array
+          for(int j = 1; ; j++){
+            // get the next token
+            token = strtok(NULL, s);
+            // enlarge args-array by one element
+            args = (char**)realloc(args, (sizeof(char*) * (j + 1)));
+
+            // if the token is NULL, add it to end of array and break
+            if(token == NULL){
+              *(args + j) = NULL;
+              break;
+            }
+            // otherwise, allocate mem in the args-array and add token
+            *(args + j) = (char*)malloc(sizeof(char) * strlen(token));
+            *(args + j) = strdup(token);
+          }
+
+          // test if the command exist in the current search path
+          if(access(*args, X_OK) != 0)
+            write(STDERR_FILENO, error_message, strlen(error_message));
+          else{
+            execv(*args, args);
+          }
+        }
+        else{
+          // in parent process, waiting for child to terminate
+          wait(NULL);
+        }
+      }
     }
   }
-  return 0; 
+  return 0;
 }
 
