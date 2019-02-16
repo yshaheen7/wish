@@ -21,6 +21,7 @@ main(int argc, char *argv[])
   char *ptr = NULL;
   ssize_t nread;
   const char s[20] = "/' ''\t''\n'";
+  const char s2[10] = "' ''\t''\n'"; // delim for cd, wich ignores /
   char *token;
   char defPath[] = "/bin/";
   char *path;
@@ -70,10 +71,25 @@ main(int argc, char *argv[])
         }
       }
 
-      // to avoid prinnting 'wish> 'e before exiting when stdin == (Ctrl + D)
+      // to avoid prinnting 'wish> ' before exiting when stdin == (Ctrl + D)
       else if(feof(stdin)){
 	printf("\n");
         exit(0);
+      }
+
+      // second built-in command, cd. check if user typed cd
+      if((ptr = strstr(line, "cd")) != NULL){
+        // get the first token, i.e. the command to be executed and ignor it
+        token = strtok(line, s2);
+        // get the next token, the path (needs to be a full path or else 
+	// the chdir will fail
+        token = strtok(NULL, s2);
+
+	// now call the chdir syscall with user specified path in 'token'
+        if(chdir(token) != 0){
+          write(STDERR_FILENO, error_message, strlen(error_message));
+          exit(1);
+        }
       }
 
       // if not a built-in command, fork a child process to execute command
