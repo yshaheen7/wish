@@ -22,14 +22,15 @@ main(int argc, char *argv[])
   size_t len = 0;
   char *ptr = NULL;
   ssize_t nread;
-  const char s[20] = "/' ''\t''\n'";
-  const char s2[10] = "' ''\t''\n'"; // delim for cd, which ignores '/'
+  char *s = "/;.,' ''\t''\n'";
+  char *s2 = "' ''\t''\n'"; // delim for cd, which ignores '/'
   char *token;
   char *tempPath;
   char **path;
   int histCount = 0;
   double histArg;
   char **history;
+  char **args;
   char error_message[30] = "An error has occurred\n";
   int cdArg;
   int slash;
@@ -66,8 +67,8 @@ main(int argc, char *argv[])
     // allocate memory for the path, to hold search paths and set it to 
     // '/bin/' by default
     path = (char**)malloc(sizeof(char*));
-    *path = (char*)malloc(sizeof(char) * strlen("/bin/"));
-    *path = "/bin/";
+    *path = (char*)malloc(sizeof(char) * strlen("/bin"));
+    *path = "/bin";
 
     // now in the interactive mode
     while(1){
@@ -97,7 +98,7 @@ main(int argc, char *argv[])
       // allocate memory to hold line in history
       *(history + histCount)= (char*)malloc(sizeof(char) * strlen(line));
       // add the current line to history, as long as it is not empty line
-      if(strcmp(line, "\n") != 0)
+      if(*line != '\n')
         *(history + histCount) = strdup(line);
       // increment history counter and reallocate memory for next line
       histCount++;
@@ -218,7 +219,7 @@ main(int argc, char *argv[])
             for(int j = 0; ; j++, token = NULL){
               subtoken = strtok_r(token, strPd2, &strPtr2);
               if(subtoken == NULL || (slash = strcmp(subtoken, "/")) == 0){
-                strcat(*(path + i), "/");
+              //  strcat(*(path + i), "/");
                 break;
               }
 
@@ -243,47 +244,30 @@ main(int argc, char *argv[])
           // get the first token, i.e. the command to be executed 
           token = strtok(line, s);
 
+          // allocate memory for args array(which is to be passed to execv)
+          // initially, it has only one slot to hold the command's path
+          args = (char**)malloc(sizeof(char*) * 1);
+          *args = malloc(sizeof(char) * strlen(token));
+
+          // now add the command to the first element of args
+          *args = strdup(token);
+
           // allocate memory in tempPath varialbe to hold the command's
           // full path
           tempPath = (char*)malloc(strlen(*path) + strlen(token));
 
           // add the full path for the command in tempPath
           strcpy(tempPath, *path);
+	  strcat(tempPath, "/");
           strcat(tempPath, token);
-
-          // test if the bin-file exist in the current path
-          // if not check other search paths, and assign tempPath
-	  // to the one that has the file in it
-          if(access(tempPath, X_OK) != 0){
-            for(int i = 1; ; i++ ){
-              if(*(path + i) == NULL)
-                break;
-	      else{
-
-               tempPath = (char*)realloc(tempPath,
-			       strlen((*(path + i)) + strlen(token)));
-               strcpy(tempPath, (*(path + i)));
-               strcat(tempPath, token);
-               if(access(tempPath, X_OK) == 0)
-                 break;
-	      }
-            }
-          }
-
-          // allocate memory for args array(which is to be passed to execv)
-          // initially, it has only one slot to hold the command's path
-          char **args = (char**)malloc(sizeof(char*) * 1);
-          *args = malloc(sizeof(char) * strlen(tempPath));
-          // now add the command's full path to the first element of args
-          strcpy(*args, tempPath);
 
           // read the rest of tokens, reallocate memory in the args array
           // and allocate memory for each token, then add it to the array
           for(int j = 1; ; j++){
             // get the next token
-            token = strtok(NULL, s);
+            token = strtok(NULL, s2);
             // enlarge args-array by one element
-            args = (char**)realloc(args, (sizeof(char*) * (j + 1)));
+            args = (char**)realloc(args, (sizeof(char*) * (j + 2)));
 		
             // if the token is NULL, add it to end of array and break
             if(token == NULL){
@@ -297,13 +281,13 @@ main(int argc, char *argv[])
           }
 
           // test if the command exist in the current search path
-          if(access(*args, X_OK) != 0){
+          if(access(tempPath, X_OK) != 0){
             write(STDERR_FILENO, error_message, strlen(error_message));
             exit(0);
           }
 
           else{
-            execv(*args, args);
+            execv(tempPath, args);
             write(STDERR_FILENO, error_message, strlen(error_message));
           }
         }
@@ -325,6 +309,10 @@ main(int argc, char *argv[])
             printf("\n");
             exit(0);
           }
+	  else{
+            fflush(stdin);
+            fflush(stdout);
+	  }
         }
       }
     }
