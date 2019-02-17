@@ -23,15 +23,21 @@ main(int argc, char *argv[])
   char *ptr = NULL;
   ssize_t nread;
   const char s[20] = "/' ''\t''\n'";
-  const char s2[10] = "' ''\t''\n'"; // delim for cd, wich ignores /
+  const char s2[10] = "' ''\t''\n'"; // delim for cd, which ignores '/'
   char *token;
-  char defPath[] = "/bin/";
-  char *path;
+  char *tempPath;
+  char **path;
   int histCount = 0;
   double histArg;
   char **history;
   char error_message[30] = "An error has occurred\n";
   int cdArg;
+  int slash;
+  char *strPd1 = ";.' ''\t''\n'";
+  char *strPd2 = "/";
+  char *subtoken;
+  char *strPtr1, *strPtr2;
+
   // exit if the user has run the shell wih too many arguments
   if(argc > 2){
     write(STDERR_FILENO, error_message, strlen(error_message));
@@ -56,6 +62,12 @@ main(int argc, char *argv[])
   else{
     // allocate memory for the array of strings to store the history
     history = (char**)malloc(sizeof(char*));
+
+    // allocate memory for the path, to hold search paths and set it to 
+    // '/bin/' by default
+    path = (char**)malloc(sizeof(char*));
+    *path = (char*)malloc(sizeof(char) * strlen("/bin/"));
+    *path = "/bin/";
 
     // now in the interactive mode
     while(1){
@@ -84,8 +96,9 @@ main(int argc, char *argv[])
 
       // allocate memory to hold line in history
       *(history + histCount)= (char*)malloc(sizeof(char) * strlen(line));
-      // add the current line to history
-      *(history + histCount) = strdup(line);
+      // add the current line to history, as long as it is not empty line
+      if(strcmp(line, "\n") != 0)
+        *(history + histCount) = strdup(line);
       // increment history counter and reallocate memory for next line
       histCount++;
       history = (char**)realloc(history, (sizeof(char*) * (histCount + 1)));
@@ -159,6 +172,63 @@ main(int argc, char *argv[])
         }
       }
 
+      // fourth built-in command, path. It changes the 
+      // current path to whatever is specified by user
+      // if nothing is specfified, then path is empty
+      // and only built in commands can be executed
+      else if((ptr = strstr(line, "path")) != NULL
+                 && strlen(token = strtok_r(line, strPd1, &strPtr1)) == 4){
+        // get the next token
+        token = strtok_r(NULL, strPd1, &strPtr1);
+
+        // empty the courrent path arry of all elements
+	for(int i = 1; ;i++){
+          if(*(path + i) == NULL)
+            break;
+          free(*(path + i));
+        }
+        free(path);
+
+        // allocate memory for the path, to hold search path/s
+        path = (char**)malloc(sizeof(char*));
+ 
+        // if path is called with no args, set the search path to empty
+        if(token == NULL)
+          *path = NULL;
+
+        // else, get paths one by one, and store them in the path's array
+        else{
+          for(int i = 0; ; i++, token = strtok_r(NULL, strPd1, &strPtr1)) {
+            // if no more tokens, break from the loop and set the end of
+	    // array
+            if(token == NULL){
+              *(path + i) = NULL;
+              break;
+            }
+
+            // else, increase the size of the array to hold an element
+            path = (char**)realloc(path, (sizeof(char*) * (i + 2)));
+            // and allocate memory for the path string in the token
+            // and set it to an empty string 
+            *(path + i) = (char*)malloc(sizeof(char) * strlen(token));
+            strcpy(*(path + i), "");
+
+            // parse through the input of the user, and allign the path 
+            // one token at a time
+            for(int j = 0; ; j++, token = NULL){
+              subtoken = strtok_r(token, strPd2, &strPtr2);
+              if(subtoken == NULL || (slash = strcmp(subtoken, "/")) == 0){
+                strcat(*(path + i), "/");
+                break;
+              }
+
+              strcat(*(path + i), "/");
+              strcat(*(path + i), subtoken);
+            }
+          }
+	}  
+      }
+
       // if not a built-in command, fork a child process to execute command
       else{
         int rc = fork();
@@ -167,24 +237,45 @@ main(int argc, char *argv[])
           write(STDERR_FILENO, error_message, strlen(error_message));
           exit(1);
         }
+
         else if(rc == 0){
           // this is the new child process
           // get the first token, i.e. the command to be executed 
           token = strtok(line, s);
 
-          // allocate memory in path varialbe to hold the command full path
-          path = malloc(strlen(defPath) + strlen(token));
+          // allocate memory in tempPath varialbe to hold the command's
+          // full path
+          tempPath = (char*)malloc(strlen(*path) + strlen(token));
 
-          // path now has the full path for the command (along with default path)
-          strcpy(path, defPath);
-          strcat(path, token);
+          // add the full path for the command in tempPath
+          strcpy(tempPath, *path);
+          strcat(tempPath, token);
+
+          // test if the bin-file exist in the current path
+          // if not check other search paths, and assign tempPath
+	  // to the one that has the file in it
+          if(access(tempPath, X_OK) != 0){
+            for(int i = 1; ; i++ ){
+              if(*(path + i) == NULL)
+                break;
+	      else{
+
+               tempPath = (char*)realloc(tempPath,
+			       strlen((*(path + i)) + strlen(token)));
+               strcpy(tempPath, (*(path + i)));
+               strcat(tempPath, token);
+               if(access(tempPath, X_OK) == 0)
+                 break;
+	      }
+            }
+          }
 
           // allocate memory for args array(which is to be passed to execv)
           // initially, it has only one slot to hold the command's path
           char **args = (char**)malloc(sizeof(char*) * 1);
-          *args = malloc(sizeof(char) * strlen(path));
+          *args = malloc(sizeof(char) * strlen(tempPath));
           // now add the command's full path to the first element of args
-          strcpy(*args, path);
+          strcpy(*args, tempPath);
 
           // read the rest of tokens, reallocate memory in the args array
           // and allocate memory for each token, then add it to the array
@@ -193,12 +284,13 @@ main(int argc, char *argv[])
             token = strtok(NULL, s);
             // enlarge args-array by one element
             args = (char**)realloc(args, (sizeof(char*) * (j + 1)));
-
+		
             // if the token is NULL, add it to end of array and break
             if(token == NULL){
               *(args + j) = NULL;
               break;
             }
+
             // otherwise, allocate mem in the args-array and add token
             *(args + j) = (char*)malloc(sizeof(char) * strlen(token));
             *(args + j) = strdup(token);
@@ -209,10 +301,13 @@ main(int argc, char *argv[])
             write(STDERR_FILENO, error_message, strlen(error_message));
             exit(0);
           }
+
           else{
             execv(*args, args);
+            write(STDERR_FILENO, error_message, strlen(error_message));
           }
-        }  
+        }
+	
         else{
           // in parent process, waiting for child to terminate
           wait(NULL);
@@ -234,6 +329,10 @@ main(int argc, char *argv[])
       }
     }
   }
+
+  // free memroy allcated by malloc
+  // for(i = 0; ; i++){
+
   return 0;
 }
 
