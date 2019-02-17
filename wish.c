@@ -12,6 +12,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <math.h>
+#include <ctype.h>
 int
 main(int argc, char *argv[])
 {
@@ -25,9 +27,11 @@ main(int argc, char *argv[])
   char *token;
   char defPath[] = "/bin/";
   char *path;
-  //int argsCount;
+  int histCount = 0;
+  double histArg;
+  char **history;
   char error_message[30] = "An error has occurred\n";
-   
+  int cdArg;
   // exit if the user has run the shell wih too many arguments
   if(argc > 2){
     write(STDERR_FILENO, error_message, strlen(error_message));
@@ -46,20 +50,21 @@ main(int argc, char *argv[])
     }
     if(feof(fp)) 
       exit(0);
-    }
+  }
     
   // otherwise, enter the interactive mode
   else{
+    // allocate memory for the array of strings to store the history
+    history = (char**)malloc(sizeof(char*));
+
+    // now in the interactive mode
     while(1){
       printf("wish> "); // print the prompt for the user
 
-      // exit if reached the end of file/i.e. stdin == (Ctrl + D)
-      if(feof(stdin)){
-        printf("\n");
-        exit(0);
-      }
+      fflush(stdin);
+      fflush(stdout);
 
-      // otherwise get the input and store it in 'line'
+      // get the user input and store it in 'line'
       getline(&line, &len, stdin);
 
       // first built-in command, exit. check if user typed exit
@@ -73,29 +78,91 @@ main(int argc, char *argv[])
 
       // to avoid prinnting 'wish> ' before exiting when stdin == (Ctrl + D)
       else if(feof(stdin)){
-	printf("\n");
+        printf("\n");
         exit(0);
       }
 
+      // allocate memory to hold line in history
+      *(history + histCount)= (char*)malloc(sizeof(char) * strlen(line));
+      // add the current line to history
+      *(history + histCount) = strdup(line);
+      // increment history counter and reallocate memory for next line
+      histCount++;
+      history = (char**)realloc(history, (sizeof(char*) * (histCount + 1)));
+
       // second built-in command, cd. check if user typed cd
       if((ptr = strstr(line, "cd")) != NULL){
-        // get the first token, i.e. the command to be executed and ignor it
+        // get the first token, i.e. the command, and ignor it
         token = strtok(line, s2);
-        // get the next token, the path (needs to be a full path or else 
-	// the chdir will fail
-        token = strtok(NULL, s2);
 
-	// now call the chdir syscall with user specified path in 'token'
-        if(chdir(token) != 0){
+        // get the next token, the path (needs to be a full path or else 
+        // the chdir will fail, also, if the path is empty thorw an error
+        if((token = strtok(NULL, s2)) == NULL){
           write(STDERR_FILENO, error_message, strlen(error_message));
-          exit(1);
+        }
+        // now call the chdir syscall with user specified path in 'token'
+        else if((cdArg = chdir(token)) != 0){      
+          write(STDERR_FILENO, error_message, strlen(error_message));
+        }
+      }
+
+      // third built-in command, history. check if user typed history
+      // get the first token, i.e. the command, and check syntax
+      else if((ptr = strstr(line, "history")) != NULL 
+          && strlen(token = strtok(line, s)) == 7){
+        // get the next token
+        token = strtok(NULL, s);
+
+        // if there is no argument, print all history
+        if(token == NULL){
+          for(int i = 0; i < histCount; i++){
+            printf("%s", *(history + i));
+          }
+        }
+
+        // if there is an argument, but it is not a number throw an error
+        else if((strcmp(token, "0")) != 0 && (histArg = atof(token)) == 0){
+          write(STDERR_FILENO, error_message, strlen(error_message));
+          //histArg = (int)atoi(token);
+        }
+
+        // if the argument is a number, then round it up and print
+        // last 'number' of history lines, according to 
+        // number specified by user
+        else{
+          histArg = atof(token);
+          // if there is more than one argument, throw an error
+          if((token = strtok(NULL, s)) != NULL){
+            write(STDERR_FILENO, error_message, strlen(error_message));
+          }
+
+          // if value is not positive then do not do anyting
+          else if(histArg <= 0){
+          }
+
+          else{ 
+            histArg = ceil(histArg);
+            // if the number specified is greater than history element,
+	    // print the whole history
+            if(histArg >= histCount){
+              for(int i = 0; i < histCount; i++){
+                printf("%s", *(history + i));
+              }
+            }
+            else{
+              int count = histCount - histArg;
+              for(int i = count; i  <  histCount; i++){
+                printf("%s", *(history + i));
+              }
+            }
+          } 
         }
       }
 
       // if not a built-in command, fork a child process to execute command
       else{
         int rc = fork();
-	// now in the child process, if negative then fork failed
+        // now in the child process, if negative then fork failed
         if(rc < 0){
           write(STDERR_FILENO, error_message, strlen(error_message));
           exit(1);
@@ -138,15 +205,31 @@ main(int argc, char *argv[])
           }
 
           // test if the command exist in the current search path
-          if(access(*args, X_OK) != 0)
+          if(access(*args, X_OK) != 0){
             write(STDERR_FILENO, error_message, strlen(error_message));
+            exit(0);
+          }
           else{
             execv(*args, args);
           }
-        }
+        }  
         else{
           // in parent process, waiting for child to terminate
           wait(NULL);
+          // check if user typed exit, and exit if true
+          if((ptr = strstr(line, "exit")) != NULL){
+            if(strlen(line) != 5) // its error to type exit w/arguments
+              write(STDERR_FILENO, error_message, strlen(error_message));
+            else{
+              exit(0);
+            }
+          }
+
+          // also exit, if stdin == (Ctrl + D)
+          else if(feof(stdin)){
+            printf("\n");
+            exit(0);
+          }
         }
       }
     }
