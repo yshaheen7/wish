@@ -2,9 +2,10 @@
  *    Name: Yousef Shaheen
  *    Login: yousef
  *    Project: p2a
- *    Namf of this file: wish.c
+ *    Name of this file: wish.c
  *
- *    This file is the program that implement a shel called wish
+ *    This is the source code for the program that implement a basic
+ *    comand line intreputer, shel, called wish
  *
  */
 #include <stdlib.h>
@@ -22,7 +23,7 @@ main(int argc, char *argv[])
   size_t len = 0;
   char *ptr = NULL;
   ssize_t nread;
-  char *s = "/;.,' ''\t''\n'";
+  char *s = "/;' ''\t''\n'";
   char *s2 = "' ''\t''\n'"; // delim for cd, which ignores '/'
   char *token;
   char *tempPath;
@@ -41,22 +42,114 @@ main(int argc, char *argv[])
 
   // exit if the user has run the shell wih too many arguments
   if(argc > 2){
-    write(STDERR_FILENO, error_message, strlen(error_message));
     exit(1);
   }
 
   // if there is one argument, run in batch-mode
-  if(argc == 2){
+  else if(argc == 2){
+    // allocate memory for the path, to hold search paths and set it to
+    // '/bin/' by default
+    path = (char**)malloc(sizeof(char*));
+    *path = (char*)malloc(sizeof(char) * strlen("/bin"));
+    *path = "/bin";
+
+    // open the file that the user included in the input for read
     fp = fopen(argv[1], "r");
     if(fp == NULL){
-      printf("error: cant open file\n");
-        exit(0);
-    }
+      write(STDERR_FILENO, error_message, strlen(error_message));
+      exit(1);
+    } // read the file line by line
     while((nread = getline(&line, &len, fp)) != -1){
-      printf("%s", line);
-    }
-    if(feof(fp)) 
+      int rc = fork();
+      // now in the child process, if negative then fork failed
+      if(rc < 0){
+        //write(STDERR_FILENO, error_message, strlen(error_message));
+        exit(1);
+      }
+
+      else if(rc == 0){
+        // this is the new child process
+        // redirection starts here, if the user typed '>'
+        if((ptr = strstr(line, ">")) != NULL){
+          // getting the file name
+          token = strtok(line, ">");
+          token = strtok(NULL, s);
+
+          // rediricting the output to the file named specified
+          freopen(token, "a+", stdout);
+          freopen(token, "a+", stderr);
+        }  
+
+        // get the first token, i.e. the command to be executed 
+        token = strtok(line, s);
+
+        // allocate memory for args array(which is to be passed to execv)
+        // initially, it has only one slot to hold the command's path
+        args = (char**)malloc(sizeof(char*) * 1);
+        *args = malloc(sizeof(char) * strlen(token));
+
+        // now add the command to the first element of args
+        *args = strdup(token);
+
+        // allocate memory in tempPath varialbe to hold the command's
+        // full path
+        tempPath = (char*)malloc(strlen(*path) + strlen(token));
+
+        // add the full path for the command in tempPath
+        strcpy(tempPath, *path);
+        strcat(tempPath, "/");
+        strcat(tempPath, token);
+
+        // read the rest of tokens, reallocate memory in the args array
+        // and allocate memory for each token, then add it to the array
+        for(int j = 1; ; j++){
+          // get the next token
+          token = strtok(NULL, s2);
+          // enlarge args-array by one element
+          args = (char**)realloc(args, (sizeof(char*) * (j + 2)));
+	
+          // if the token is NULL, add it to end of array and break
+          if(token == NULL){
+            *(args + j) = NULL;
+            break;
+          }
+
+          // otherwise, allocate mem in the args-array and add token
+          *(args + j) = (char*)malloc(sizeof(char) * strlen(token));
+          *(args + j) = strdup(token);
+        }
+
+        // test if the command exist in the current search path
+        if(access(tempPath, X_OK) != 0){
+          exit(0);
+        }
+
+        else{
+          execv(tempPath, args);
+        }
+      }
+
+      else{
+        // in parent process, waiting for child to terminate
+        wait(NULL);
+        // check if user typed exit, and exit if true
+        if((ptr = strstr(line, "exit")) != NULL){
+          if(strlen(line) != 5) // its error to type exit w/arguments
+            write(STDERR_FILENO, error_message, strlen(error_message));
+          else{
+            exit(0);
+          }
+        }
+
+        // also exit, if stdin == (Ctrl + D)
+        else if(feof(stdin)){
+          printf("\n");
+          exit(0);
+        }
+      }
+      if(feof(fp)) 
       exit(0);
+    }
   }
     
   // otherwise, enter the interactive mode
@@ -235,12 +328,125 @@ main(int argc, char *argv[])
         int rc = fork();
         // now in the child process, if negative then fork failed
         if(rc < 0){
-          write(STDERR_FILENO, error_message, strlen(error_message));
+         // write(STDERR_FILENO, error_message, strlen(error_message));
           exit(1);
         }
 
         else if(rc == 0){
           // this is the new child process
+          // redirection starts here, if the user typed '>'
+          if((ptr = strstr(line, ">")) != NULL){
+            // getting the file name
+            token = strtok(line, ">");
+            token = strtok(NULL, s);
+
+            // rediricting the output to the file named specified
+	    // by the user and append it to what is altready in it
+            freopen(token, "a+", stdout);
+            freopen(token, "a+", stderr);
+          }  
+
+          // piping strats here, if it was typed by the user
+	  if((ptr = strstr(line, "|")) != NULL){
+            // if string has both symbols, exit and don't do anyting
+            if((ptr = strstr(line, ">")) != NULL){
+              write(STDERR_FILENO, error_message, strlen(error_message))
+            }
+  
+            // otherwise, fork a sub child process and pipe its outpt 
+	    // back to this child process
+            else{
+      
+int fd1[2];
+ pipe(fd1);
+ close(fd1[0]);
+   dup2(fd1[1], STDOUT_FILENO);
+   close(fd1[1]);
+
+             
+      int rc = fork();
+      // now in the child process, if negative then fork failed
+      if(rc < 0){
+        //write(STDERR_FILENO, error_message, strlen(error_message));
+        exit(1);
+      }
+
+      else if(rc == 0){
+        // this is the new child process
+
+        // get the first token, i.e. the command to be executed 
+        token = strtok(line, "|");
+
+        // allocate memory for args array(which is to be passed to execv)
+        // initially, it has only one slot to hold the command's path
+        args = (char**)malloc(sizeof(char*) * 1);
+        *args = malloc(sizeof(char) * strlen(token));
+
+        // now add the command to the first element of args
+        *args = strdup(token);
+
+        // allocate memory in tempPath varialbe to hold the command's
+        // full path
+        tempPath = (char*)malloc(strlen(*path) + strlen(token));
+
+        // add the full path for the command in tempPath
+        strcpy(tempPath, *path);
+        strcat(tempPath, "/");
+        strcat(tempPath, token);
+
+        // read the rest of tokens, reallocate memory in the args array
+        // and allocate memory for each token, then add it to the array
+        for(int j = 1; ; j++){
+          // get the next token
+          token = strtok(NULL, s2);
+          // enlarge args-array by one element
+          args = (char**)realloc(args, (sizeof(char*) * (j + 2)));
+	
+          // if the token is NULL, add it to end of array and break
+          if(token == NULL){
+            *(args + j) = NULL;
+            break;
+          }
+
+          // otherwise, allocate mem in the args-array and add token
+          *(args + j) = (char*)malloc(sizeof(char) * strlen(token));
+          *(args + j) = strdup(token);
+        }
+
+        // test if the command exist in the current search path
+        if(access(tempPath, X_OK) != 0){
+          exit(0);
+        }
+
+        else{
+          execv(tempPath, args);
+        }
+      }
+
+      else{
+        // in parent process, waiting for child to terminate
+        wait(NULL);
+
+ char buffer[100];
+ ssize_t nbytes;
+   close(fd1[1]);
+   dup2(fd1[0],STDIN_FILENO);
+   close(fd1[0]);
+
+   // creat a second pipe
+   int fd1[2];
+    pipe(fd2);
+
+    // direct the output to pipe 2
+     close(fd2[0]);
+   dup2(fd2[1], STDOUT_FILENO);
+   close(fd2[1]);
+
+   while ((nbytes = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0)
+          write(STDOUT_FILENO, buffer, nbytes);
+
+   
+
           // get the first token, i.e. the command to be executed 
           token = strtok(line, s);
 
@@ -258,7 +464,7 @@ main(int argc, char *argv[])
 
           // add the full path for the command in tempPath
           strcpy(tempPath, *path);
-	  strcat(tempPath, "/");
+          strcat(tempPath, "/");
           strcat(tempPath, token);
 
           // read the rest of tokens, reallocate memory in the args array
@@ -288,7 +494,67 @@ main(int argc, char *argv[])
 
           else{
             execv(tempPath, args);
+          }
+        }
+	
+        else{
+          // in parent process, waiting for child to terminate
+          wait(NULL);
+            fflush(stdin);
+            fflush(stdout);
+          }
+        }
+	  
+  }
+
+  else {
+          // get the first token, i.e. the command to be executed 
+          token = strtok(line, s);
+
+          // allocate memory for args array(which is to be passed to execv)
+          // initially, it has only one slot to hold the command's path
+          args = (char**)malloc(sizeof(char*) * 1);
+          *args = malloc(sizeof(char) * strlen(token));
+
+          // now add the command to the first element of args
+          *args = strdup(token);
+
+          // allocate memory in tempPath varialbe to hold the command's
+          // full path
+          tempPath = (char*)malloc(strlen(*path) + strlen(token));
+
+          // add the full path for the command in tempPath
+          strcpy(tempPath, *path);
+          strcat(tempPath, "/");
+          strcat(tempPath, token);
+
+          // read the rest of tokens, reallocate memory in the args array
+          // and allocate memory for each token, then add it to the array
+          for(int j = 1; ; j++){
+            // get the next token
+            token = strtok(NULL, s2);
+            // enlarge args-array by one element
+            args = (char**)realloc(args, (sizeof(char*) * (j + 2)));
+		
+            // if the token is NULL, add it to end of array and break
+            if(token == NULL){
+              *(args + j) = NULL;
+              break;
+            }
+
+            // otherwise, allocate mem in the args-array and add token
+            *(args + j) = (char*)malloc(sizeof(char) * strlen(token));
+            *(args + j) = strdup(token);
+          }
+
+          // test if the command exist in the current search path
+          if(access(tempPath, X_OK) != 0){
             write(STDERR_FILENO, error_message, strlen(error_message));
+            exit(0);
+          }
+
+          else{
+            execv(tempPath, args);
           }
         }
 	
@@ -309,17 +575,39 @@ main(int argc, char *argv[])
             printf("\n");
             exit(0);
           }
-	  else{
+          else{
             fflush(stdin);
             fflush(stdout);
-	  }
+          }
         }
       }
     }
+
+    // free memroy allcated by malloc in history
+    for(int i = 0; ; i++){
+      if(*(history + i))
+        break;
+      free(*(history + i));
+    }
+    free(history);
   }
 
-  // free memroy allcated by malloc
-  // for(i = 0; ; i++){
+  // free memroy allcated by malloc in args, path, and tempPath
+  for(int i = 0; ; i++){
+    if(*(args + i))
+      break;
+    free(*(args + i));
+  }
+  free(args);
+
+  for(int i = 0; ; i++){
+    if(*(path + i))
+      break;
+    free(*(path + i));
+  }
+  free(path);
+
+  free(tempPath);
 
   return 0;
 }

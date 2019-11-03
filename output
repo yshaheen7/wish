@@ -1,0 +1,28 @@
+total 73
+drwxrwxr-x 4 yousef yousef  2048 Feb 17 18:32 .
+drwxrwxr-x 7 yousef yousef  2048 Feb 13 17:11 ..
+-rw-rw-r-- 1 yousef yousef    25 Feb 13 22:19 file.txt
+drwxrwxr-x 8 yousef yousef  2048 Feb 17 17:18 .git
+-rw-rw-r-- 1 yousef yousef    58 Feb 17 18:22 ls
+-rw-rw-r-- 1 yousef yousef    64 Feb 17 14:59 Makefile
+-rw-rw-r-- 1 yousef yousef     0 Feb 17 18:32 output
+-rw-rw-r-- 1 yousef yousef  8549 Feb 17 18:17 runtests.log
+-rw-rw-r-- 1 yousef yousef     0 Feb 17 15:47 stdout
+drwxrwxr-x 2 yousef yousef  2048 Feb 17 18:24 test
+-rwxrwxr-x 1 yousef yousef 17848 Feb 17 18:32 wish
+-rw-rw-r-- 1 yousef yousef 10662 Feb 17 18:32 wish.c
+-rw-r--r-- 1 yousef yousef 24576 Feb 17 18:32 .wish.c.swp
+total 74
+drwxrwxr-x 4 yousef yousef  2048 Feb 17 18:32 .
+drwxrwxr-x 7 yousef yousef  2048 Feb 13 17:11 ..
+-rw-rw-r-- 1 yousef yousef    25 Feb 13 22:19 file.txt
+drwxrwxr-x 8 yousef yousef  2048 Feb 17 17:18 .git
+-rw-rw-r-- 1 yousef yousef    58 Feb 17 18:22 ls
+-rw-rw-r-- 1 yousef yousef    64 Feb 17 14:59 Makefile
+-rw-rw-r-- 1 yousef yousef   694 Feb 17 18:32 output
+-rw-rw-r-- 1 yousef yousef  8549 Feb 17 18:17 runtests.log
+-rw-rw-r-- 1 yousef yousef     0 Feb 17 15:47 stdout
+drwxrwxr-x 2 yousef yousef  2048 Feb 17 18:24 test
+-rwxrwxr-x 1 yousef yousef 17848 Feb 17 18:32 wish
+-rw-rw-r-- 1 yousef yousef 10662 Feb 17 18:32 wish.c
+-rw-r--r-- 1 yousef yousef 24576 Feb 17 18:32 .wish.c.swp
