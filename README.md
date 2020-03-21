@@ -43,6 +43,5 @@
 	the program forks a child process to execute the command.
 	It runs the command, or prints error if it doesn't exist.
 	
-	// it can redirect output
-	// but pipe is still under development
+	// Bonus feature "pipe" is under development
 
